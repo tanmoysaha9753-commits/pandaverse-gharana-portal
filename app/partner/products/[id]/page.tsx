@@ -39,7 +39,7 @@ async function getProductDetail(productId: string, partnerId: string) {
   // Generate signed URLs for videos
   const videosWithUrls = await Promise.all(
     (videos || []).map(async (vid) => {
-      const { data } = await supabase.storage.from('product-videos').createSignedUrl(vid.storage_path, 3600);
+      const { data } = await supabase.storage.from('product-videos').createSignedUrl(vid.storage_path, 3600); 
       return { ...vid, signed_url: data?.signedUrl || null };
     })
   );
