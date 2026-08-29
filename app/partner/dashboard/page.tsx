@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { createServerSupabaseClient } from '@/lib/supabase';
-import { PartnerLayout } from '@/components/PartnerLayout';
+import PartnerLayout from '@/components/PartnerLayout';
 import { Package, Upload, FileImage, Film, Clock } from 'lucide-react';
 
 async function getPartnerData(partnerId: string) {
