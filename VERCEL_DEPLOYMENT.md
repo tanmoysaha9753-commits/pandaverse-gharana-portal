@@ -100,6 +100,7 @@ If `package.json` is inside a subfolder, you will need to either:
 |------|-------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Your Supabase project URL (e.g., `https://abcdefghijklmnop.supabase.co`) |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Your Supabase anon key (from Supabase Dashboard → Settings → API) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Your Supabase service role key (from Supabase Dashboard → Settings → API → "service_role secret") |
 
 3. Make sure both are set for **"Production"**, **"Preview"**, and **"Development"** environments.
 4. Do NOT prefix the variable names with anything — use them exactly as shown.
@@ -198,7 +199,7 @@ If `package.json` is inside a subfolder, you will need to either:
 
 **Solution:**
 - Go to your Vercel project → **Settings** → **Environment Variables**.
-- Add both `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+- Add all three: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
 - After adding, go to **Deployments** and click **"Redeploy"** on the latest deployment.
 
 ### Supabase connection fails

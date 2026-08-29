@@ -29,6 +29,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // and useRef guarantees the listener is registered exactly once.
   const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   const registeredRef = useRef(false);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const isFirstLoadRef = useRef(true);
+
+  const clearRetry = () => {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = undefined;
+    }
+  };
 
   const refreshUser = async () => {
     try {
@@ -46,18 +55,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             role: profile.role,
             full_name: profile.full_name,
           });
+          // Profile found — stop retrying
+          clearRetry();
+          setLoading(false);
+        } else if (isFirstLoadRef.current) {
+          // Profile not found yet — only retry aggressively on first load
+          // (this handles the race condition after signup)
+          isFirstLoadRef.current = false;
+          retryTimerRef.current = setTimeout(async () => {
+            await refreshUser();
+          }, 400);
         } else {
           setUser(null);
+          setLoading(false);
         }
       } else {
         setUser(null);
+        clearRetry();
+        setLoading(false);
       }
     } catch {
       setUser(null);
-    } finally {
+      clearRetry();
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    return () => clearRetry();
+  }, []);
 
   useEffect(() => {
     refreshUser();
@@ -66,6 +92,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     registeredRef.current = true;
 
     const { data: listener } = supabase.auth.onAuthStateChange(() => {
+      isFirstLoadRef.current = false;
+      clearRetry();
       // Use a microtask to avoid running state updates during render
       setTimeout(() => { refreshUser(); }, 0);
     });

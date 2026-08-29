@@ -68,14 +68,14 @@ export default function UploadProductPage() {
   }, [images]);
 
   const updateField = (field: string, value: any) => setFormData(prev => ({ ...prev, [field]: value }));
-     const nextStep = () => setCurrentStep((s) => {
-     const next = s + 1;
-     return (next > 8 ? 8 : next) as Step;
-   });
-   const prevStep = () => setCurrentStep((s) => {
-     const prev = s - 1;
-     return (prev < 1 ? 1 : prev) as Step;
-   });
+  const nextStep = () => setCurrentStep((s) => {
+    const next = s + 1;
+    return (next > 8 ? 8 : next) as Step;
+  });
+  const prevStep = () => setCurrentStep((s) => {
+    const prev = s - 1;
+    return (prev < 1 ? 1 : prev) as Step;
+  });
 
   const handleImageChange = (category: string, files: FileList | null) => {
     if (!files) return;

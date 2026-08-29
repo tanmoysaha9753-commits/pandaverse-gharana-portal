@@ -45,7 +45,10 @@ On the same **API** settings page, look at the **"Project API keys"** section. Y
 1. **anon public** — This is the public key. It is safe to use in frontend code. Copy this key.
 2. **service_role secret** — This is a secret key. Never expose it in frontend code or commit it to Git.
 
-For this application, you only need the **anon public** key.
+For the frontend (Next.js pages), you need the **anon public** key.
+For the server-side (API routes), you also need the **service_role secret** key.
+
+**Copy both keys.**
 
 ---
 
@@ -56,11 +59,18 @@ In your project folder, copy `.env.example` to `.env.local`:
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://abcdefghijklmnop.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 ```
 
 Replace the values with the ones you copied from Step 3 and Step 4.
+- `NEXT_PUBLIC_SUPABASE_URL` = your Project URL (from Step 3)
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` = the "anon public" key (from Step 4)
+- `SUPABASE_SERVICE_ROLE_KEY` = the "service_role secret" key (from Step 4) — used ONLY on the server side in API routes.
 
-**Important:** Never share these values publicly. Never commit `.env.local` to Git.
+**Important:**
+- Never share these values publicly.
+- Never commit `.env.local` to Git.
+- The `SUPABASE_SERVICE_ROLE_KEY` bypasses Row Level Security — keep it secret.
 
 ---
 

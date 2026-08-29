@@ -6,32 +6,56 @@ export async function middleware(request: NextRequest) {
     request: { headers: request.headers },
   });
 
-  const accessToken = request.cookies.get('sb-access-token')?.value;
-  const refreshToken = request.cookies.get('sb-refresh-token')?.value;
+  // Supabase stores session cookies using a project-specific name like:
+  //   sb-{project-ref}-auth-token
+  // Look for any cookie starting with "sb-" and ending in "-auth-token".
+  const authCookieName = request.cookies
+    .getAll()
+    .map((c) => c.name)
+    .find((name) => name.startsWith('sb-') && name.endsWith('-auth-token'));
 
   let role: string | null = null;
+  let hasSession = !!authCookieName;
 
-  if (accessToken && refreshToken) {
+  if (authCookieName) {
     try {
-      const supabase = createServerSupabaseClient();
-      supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-      });
+      const cookieValue = request.cookies.get(authCookieName)?.value;
+      if (cookieValue) {
+        // Parse the chunked cookie format: "base64-chunk1 base64-chunk2 ..."
+        const decoded = decodeURIComponent(cookieValue)
+          .split(' ')
+          .filter(Boolean)
+          .map((part) => {
+            try {
+              return JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/')));
+            } catch {
+              return null;
+            }
+          })
+          .filter(Boolean);
 
-      const { data: { user: authUser } } = await supabase.auth.getUser();
+        const sessionData = decoded[0];
+        const accessToken = sessionData?.access_token;
+        const refreshToken = sessionData?.refresh_token;
 
-      if (authUser) {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', authUser.id)
-          .maybeSingle();
+        if (accessToken && refreshToken) {
+          const supabase = createServerSupabaseClient();
+          const { data: clientData, error: sessionError } =
+            await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
 
-        role = profile?.role || null;
+          if (!sessionError && clientData?.user) {
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('role')
+              .eq('id', clientData.user.id)
+              .maybeSingle();
+
+            role = profile?.role || null;
+          }
+        }
       }
     } catch {
-      // Invalid session — let the request proceed to the page which will handle auth
+      // Invalid session — let the request proceed; page-level checks will redirect
     }
   }
 
@@ -39,21 +63,21 @@ export async function middleware(request: NextRequest) {
   const isAdminRoute = path.startsWith('/admin');
   const isPartnerRoute = path.startsWith('/partner');
   const isProtectedRoute = isAdminRoute || isPartnerRoute;
-  const isAuthPage = path === '/login';
+  const isAuthPage = path === '/login' || path === '/signup';
 
-  if (isProtectedRoute && !accessToken) {
-    return NextResponse.redirect(new URL('/login', request.url));
+  if (isProtectedRoute && !hasSession) {
+    const url = new URL('/login', request.url);
+    return NextResponse.redirect(url);
   }
 
   if (isAdminRoute && role !== 'admin') {
-    return NextResponse.redirect(new URL('/partner/dashboard', request.url));
+    const url = new URL('/partner/dashboard', request.url);
+    return NextResponse.redirect(url);
   }
 
-  if (isAuthPage && accessToken) {
-    if (role === 'admin') {
-      return NextResponse.redirect(new URL('/admin', request.url));
-    }
-    return NextResponse.redirect(new URL('/partner/dashboard', request.url));
+  if (isAuthPage && hasSession) {
+    const target = role === 'admin' ? '/admin' : '/partner/dashboard';
+    return NextResponse.redirect(new URL(target, request.url));
   }
 
   return response;

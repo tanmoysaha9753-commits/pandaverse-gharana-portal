@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS profiles (
 -- ============================================
 CREATE TABLE IF NOT EXISTS partners (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL,
+  profile_id UUID REFERENCES profiles(id) ON DELETE CASCADE NOT NULL UNIQUE,
   shop_name TEXT NOT NULL,
   shop_type TEXT,
   village_town TEXT,
@@ -139,3 +139,48 @@ CREATE INDEX IF NOT EXISTS idx_shop_details_partner_id ON shop_details(partner_i
 CREATE INDEX IF NOT EXISTS idx_media_assets_partner_id ON media_assets(partner_id);
 CREATE INDEX IF NOT EXISTS idx_media_assets_product_id ON media_assets(product_id);
 CREATE INDEX IF NOT EXISTS idx_media_assets_type ON media_assets(media_type);
+
+-- ============================================
+-- AUTO-CREATE PROFILE TRIGGER
+-- ============================================
+-- When a new user signs up in auth.users, automatically
+-- create a row in public.profiles. This runs as SECURITY DEFINER
+-- so it bypasses RLS, preventing the "Profile could not create"
+-- error during signup.
+CREATE OR REPLACE FUNCTION public.handle_new_auth_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, full_name, email, role)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', 'New User'),
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'role', 'partner')
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_auth_user();
+
+-- Also create a partners row automatically when a profile with role='partner' is created
+CREATE OR REPLACE FUNCTION public.handle_new_partner_profile()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.role = 'partner' THEN
+    INSERT INTO public.partners (profile_id, shop_name)
+    VALUES (NEW.id, COALESCE(NEW.full_name, 'My Shop') || '''s Shop')
+    ON CONFLICT DO NOTHING;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_partner_profile_created ON public.profiles;
+CREATE TRIGGER on_partner_profile_created
+  AFTER INSERT ON public.profiles
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_partner_profile();
