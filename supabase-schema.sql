@@ -3,6 +3,9 @@
 -- ============================================
 -- Copy and paste this entire file into the
 -- Supabase SQL Editor (in order) to set up your database.
+--
+-- IMPORTANT: If you previously ran the old schema that had auto-triggers,
+-- run the CLEANUP SQL from cleanup.sql FIRST, then run this schema.
 -- ============================================
 
 -- Enable UUID extension
@@ -141,46 +144,17 @@ CREATE INDEX IF NOT EXISTS idx_media_assets_product_id ON media_assets(product_i
 CREATE INDEX IF NOT EXISTS idx_media_assets_type ON media_assets(media_type);
 
 -- ============================================
--- AUTO-CREATE PROFILE TRIGGER
+-- AUTO-UPDATE updated_at TRIGGER
 -- ============================================
--- When a new user signs up in auth.users, automatically
--- create a row in public.profiles. This runs as SECURITY DEFINER
--- so it bypasses RLS, preventing the "Profile could not create"
--- error during signup.
-CREATE OR REPLACE FUNCTION public.handle_new_auth_user()
+CREATE OR REPLACE FUNCTION public.handle_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, full_name, email, role)
-  VALUES (
-    NEW.id,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', 'New User'),
-    NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'role', 'partner')
-  )
-  ON CONFLICT (id) DO NOTHING;
+  NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_auth_user();
-
--- Also create a partners row automatically when a profile with role='partner' is created
-CREATE OR REPLACE FUNCTION public.handle_new_partner_profile()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.role = 'partner' THEN
-    INSERT INTO public.partners (profile_id, shop_name)
-    VALUES (NEW.id, COALESCE(NEW.full_name, 'My Shop') || '''s Shop')
-    ON CONFLICT DO NOTHING;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
-DROP TRIGGER IF EXISTS on_partner_profile_created ON public.profiles;
-CREATE TRIGGER on_partner_profile_created
-  AFTER INSERT ON public.profiles
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_partner_profile();
+DROP TRIGGER IF EXISTS on_products_updated_at ON products;
+CREATE TRIGGER on_products_updated_at
+  BEFORE UPDATE ON products
+  FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();

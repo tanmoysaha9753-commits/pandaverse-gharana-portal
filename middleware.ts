@@ -1,90 +1,35 @@
-import { createServerSupabaseClient } from '@/lib/supabase';
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+
+// Paths that do NOT require authentication
+const PUBLIC_PATHS = ['/login', '/signup', '/', '/_next'];
+
+// Paths that require admin role
+const ADMIN_PATHS = ['/admin'];
 
 export async function middleware(request: NextRequest) {
-  const response = NextResponse.next({
-    request: { headers: request.headers },
-  });
-
-  // Supabase stores session cookies using a project-specific name like:
-  //   sb-{project-ref}-auth-token
-  // Look for any cookie starting with "sb-" and ending in "-auth-token".
-  const authCookieName = request.cookies
-    .getAll()
-    .map((c) => c.name)
-    .find((name) => name.startsWith('sb-') && name.endsWith('-auth-token'));
-
-  let role: string | null = null;
-  let hasSession = !!authCookieName;
-
-  if (authCookieName) {
-    try {
-      const cookieValue = request.cookies.get(authCookieName)?.value;
-      if (cookieValue) {
-        // Parse the chunked cookie format: "base64-chunk1 base64-chunk2 ..."
-        const decoded = decodeURIComponent(cookieValue)
-          .split(' ')
-          .filter(Boolean)
-          .map((part) => {
-            try {
-              return JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/')));
-            } catch {
-              return null;
-            }
-          })
-          .filter(Boolean);
-
-        const sessionData = decoded[0];
-        const accessToken = sessionData?.access_token;
-        const refreshToken = sessionData?.refresh_token;
-
-        if (accessToken && refreshToken) {
-          const supabase = createServerSupabaseClient();
-          const { data: clientData, error: sessionError } =
-            await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-
-          if (!sessionError && clientData?.user) {
-            const { data: profile } = await supabase
-              .from('profiles')
-              .select('role')
-              .eq('id', clientData.user.id)
-              .maybeSingle();
-
-            role = profile?.role || null;
-          }
-        }
-      }
-    } catch {
-      // Invalid session — let the request proceed; page-level checks will redirect
-    }
-  }
-
   const path = request.nextUrl.pathname;
-  const isAdminRoute = path.startsWith('/admin');
-  const isPartnerRoute = path.startsWith('/partner');
-  const isProtectedRoute = isAdminRoute || isPartnerRoute;
-  const isAuthPage = path === '/login' || path === '/signup';
 
-  if (isProtectedRoute && !hasSession) {
-    const url = new URL('/login', request.url);
-    return NextResponse.redirect(url);
+  // Allow public paths
+  if (PUBLIC_PATHS.some(p => path === p || path.startsWith(p + '/'))) {
+    return NextResponse.next();
   }
 
-  if (isAdminRoute && role !== 'admin') {
-    const url = new URL('/partner/dashboard', request.url);
-    return NextResponse.redirect(url);
+  // Get the access_token from cookies
+  const accessToken = request.cookies.get('sb-access-token')?.value
+    || request.cookies.get('access_token')?.value;
+
+  if (!accessToken) {
+    const loginUrl = new URL('/login', request.url);
+    loginUrl.searchParams.set('next', path);
+    return NextResponse.redirect(loginUrl);
   }
 
-  if (isAuthPage && hasSession) {
-    const target = role === 'admin' ? '/admin' : '/partner/dashboard';
-    return NextResponse.redirect(new URL(target, request.url));
-  }
-
-  return response;
+  // For protected paths, continue to the server component which will verify the session
+  // Role-based routing is handled by the page components themselves
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|gif|webp)$).*)',
-  ],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
